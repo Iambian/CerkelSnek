@@ -8,7 +8,7 @@
 # ----------------------------
 
 NAME        ?= CERKSNEK
-DEBUGMODE   ?= NDEBUG
+DEBUGMODE   ?= DEBUG
 COMPRESSED  ?= NO
 ICON        ?= iconc.png
 DESCRIPTION ?= "CErkel Snek"
