@@ -13,10 +13,15 @@
 
 #define SNAKE_COLOR 0x62
 #define CERKEL_COLOR 0xE0
+#define WINNER_COLOR 0x87
 
+#define WBORD_TOP 12
+#define WBORD_LEFT 4
 #define WINDOW_BORDER 2
-#define WINDOW_HEIGHT (LCD_HEIGHT-10-(WINDOW_BORDER*2))
-#define WINDOW_WIDTH (LCD_WIDTH-(WINDOW_BORDER*2))
+#define WINDOW_HEIGHT (LCD_HEIGHT-WBORD_TOP-(WINDOW_BORDER*2))
+#define WINDOW_WIDTH (LCD_WIDTH-WBORD_LEFT-(WINDOW_BORDER*2))
+
+#define ADDITIONAL_CIRCLES_PER_STAGE 5
 
 #define GS_TITLE 0
 #define GS_OPTIONS 1
@@ -61,6 +66,10 @@ void placetarget();
 void drawthickcircle(int x,int y,uint8_t r,uint8_t c);
 void updatescore();
 void drawpixel(int x,int y,int8_t angle);
+void drawcorners(uint8_t gap);
+
+void drawtitle();
+void loadstage();
 
 
 
@@ -94,6 +103,9 @@ int targetx,targety;
 uint8_t targetr;
 
 int unsigned curscore;
+
+uint8_t curstage;
+uint8_t circlesremain;
 
 
 
@@ -134,6 +146,8 @@ void main(void) {
 	ti_CloseAll();
 	/* Main Loop */
 	menuoption = maintimer = gamestate = 0;
+	
+	
 	while (1) {
 		kb_Scan();
 		switch(gamestate) {
@@ -144,18 +158,11 @@ void main(void) {
 					switch(menuoption) {
 						case 0:
 							//init game state here
+							gfx_SetDrawScreen();
 							curscore = 0;
-							trailstart = 0;
-							trailend = 16;
-							growthlength = 128;
-							angle = 0;
-							headx = (32)<<8;
-							heady = (LCD_HEIGHT/2)<<8;
-							memset(&trail,0,sizeof(trail));
+							curstage = 1;
+							loadstage();
 							gamestate = GS_GAMEPLAY;
-							gfx_FillScreen(0xFF);
-							gfx_SwapDraw();
-							redrawplayfield();
 							break;
 						case 1:
 							gamestate = GS_OPTIONS;
@@ -167,6 +174,7 @@ void main(void) {
 						default:
 							break;
 					}
+					break;
 				}
 				if (k==kb_Mode) putaway();
 				k = kb_Data[7];
@@ -174,10 +182,7 @@ void main(void) {
 				if (k&kb_Down && menuoption<2) menuoption++;
 				if (k&(kb_Up|kb_Down)) keywait();
 				
-				gfx_FillScreen(0xFF);
-				gfx_SetTextFGColor(0x00);
-				gfx_SetTextScale(3,3);
-				centerstr(title1,5);
+				drawtitle();
 				gfx_SetTextScale(2,2);
 				for(i=0;i<3;i++) {
 					if (menuoption==i) gfx_SetTextFGColor(0x4F);  // SELECTED OPT COLOR
@@ -190,7 +195,6 @@ void main(void) {
 				gfx_PrintString(menudiff[highscore.difficulty]);
 				gfx_PrintString(" ) : ");
 				gfx_PrintUInt(highscore.score[highscore.difficulty],5);
-				gfx_PrintStringXY(VERSION_INFO,290,230);
 				gfx_SwapDraw();
 				break;
 				
@@ -216,16 +220,14 @@ void main(void) {
 				if (k==kb_Mode) {
 					keywait();
 					gamestate = GS_TITLE;
+					break;
 				}
 				k = kb_Data[7];
 				if (k&kb_Up && menuoption) menuoption--;
 				if (k&kb_Down && menuoption<1) menuoption++;
 				if (k&(kb_Up|kb_Down)) keywait();
 				
-				gfx_FillScreen(0xFF);
-				gfx_SetTextFGColor(0x00);
-				gfx_SetTextScale(3,3);
-				centerstr(title1,5);
+				drawtitle();
 				gfx_SetTextScale(2,2);			
 				
 				if (menuoption==0) gfx_SetTextFGColor(0x4F);
@@ -246,26 +248,28 @@ void main(void) {
 				
 			case GS_GAMEPLAY:
 				i = 1;
-				if (!highscore.difficulty) i++;
-				if (highscore.difficulty==3) i--;
-				for (;i>0;i--) vsync();
-				gfx_BlitBuffer();
 				
+				switch(highscore.difficulty) {
+					case 0: 
+					case 1: vsync();
+					case 2: vsync(); break;
+					case 3: for(a=0x0800;a>0;a--);
+				}
+				
+//				vsync();
+//				if (!highscore.difficulty) vsync();
 				k = kb_Data[1];
 				if (k&kb_Mode) {
 					keywait();
 					gamestate = GS_TITLE;
+					gfx_SetDrawBuffer();
 					break;
 				}
 				k = kb_Data[7];
 				if (k&kb_Left) angle = (angle-1)&0x3F;
 				if (k&kb_Right) angle = (angle+1)&0x3F;
 				
-				i = 1;
-				if (highscore.difficulty > 1) i++;
-				if (highscore.difficulty > 2) i+=1;
-				
-				for (;i>0;i--) {
+				for (i=(highscore.difficulty)?2:1;i>0;i--) {
 				
 					//Update head/tail points
 					trail[trailend] = angle;
@@ -281,8 +285,19 @@ void main(void) {
 							curscore += 7;
 							growthlength += 16;
 							drawthickcircle(targetx,targety,targetr,0xFF);
-							placetarget();
+							if (!--circlesremain) {
+								drawcorners(1);
+							} else {
+								placetarget();
+							}
 							updatescore();
+						} else if (tempcolor == WINNER_COLOR) {
+							curstage++;
+							//
+							// Advance to next stage notice
+							//
+							loadstage();
+							break;
 						} else if (tempcolor != 0xFF) {
 							gamestate = GS_GAMEOVER;
 							break;
@@ -309,8 +324,14 @@ void main(void) {
 				break;
 				
 			case GS_GAMEOVER:
+				gfx_SetDrawBuffer();
 				if (curscore > highscore.score[highscore.difficulty]) {
 					highscore.score[highscore.difficulty] = curscore;
+				}
+				for(i=0;i<16;i++) {
+					
+					
+					
 				}
 				keywait();
 				gamestate = GS_TITLE;
@@ -364,6 +385,7 @@ void centerstr(char* s, uint8_t y) {
 void redrawplayfield() {
 	int x,y,a,b;
 	int8_t tempangle;
+	gfx_SetDrawScreen();
 	//Prepare draw area
 	gfx_FillScreen(0xFF);
 	//Render worm. The &0x16383 keeps A in bounds no matter if the result
@@ -383,8 +405,8 @@ void redrawplayfield() {
 	taily = y;
 	placetarget();
 	updatescore();
+	drawcorners(0);
 	vsync();
-	gfx_BlitBuffer();
 }
 
 void placetarget() {
@@ -396,8 +418,8 @@ void placetarget() {
 	
 	while (!acceptable) {
 		r = randInt(10,40);
-		xc = randInt(0+r,LCD_WIDTH-r);
-		yc = randInt(0+r,LCD_HEIGHT-r);
+		xc = randInt(WBORD_LEFT+r,WINDOW_WIDTH-r);
+		yc = randInt(WBORD_TOP+r,WINDOW_HEIGHT-r);
 		if ((dx = x-xc)<0) dx = xc-x;
 		if ((dy = y-yc)<0) dy = yc-y;
 		if ((dx*dx+dy*dy)>(r*r*40)) {
@@ -439,5 +461,58 @@ void drawpixel(int x,int y,int8_t a) {
 	x += costab[(a-16)&0x3F]*2;
 	y += costab[(a-32)&0x3F]*2;
 	gfx_SetPixel(*xs,*ys);
+}
+
+void drawtitle() {
+	gfx_FillScreen(0xFF);
+	gfx_SetTextFGColor(0x00);
+	gfx_SetTextScale(3,3);
+	centerstr(title1,5);
+	gfx_SetTextScale(1,1);
+	gfx_PrintStringXY(VERSION_INFO,290,230);
+}
+
+void drawcorners(uint8_t gap) {
+	int unsigned x1,x2,w;
+	gfx_SetColor(0x00);
+	gfx_Line_NoClip(0,10,0,239);      //left side
+	gfx_Line_NoClip(1,10,1,239);      //left side
+	gfx_Line_NoClip(319,10,319,239);  //right side
+	gfx_Line_NoClip(318,10,318,239); //right side
+
+	gfx_Line_NoClip(0,10,319,10);      //top side
+	gfx_Line_NoClip(0,11,319,11);      //top side
+	gfx_Line_NoClip(0,239,319,239);  //bottom side
+	gfx_Line_NoClip(0,238,319,238);  //bottom side
+	
+	if (gap) {
+		switch (highscore.difficulty) {
+			case 0: w = 100; break;
+			case 1: w = 80; break;
+			case 2: w = 70; break;
+			case 3: w = 50; break;
+			default: w = 10; break;
+		}
+		x1 = (LCD_WIDTH-w)>>1;
+		x2 = x1+w;
+	gfx_SetColor(0xFF);
+	gfx_Line_NoClip(x1,11,x2,11);      //top side
+	gfx_Line_NoClip(x1,10,x2,10);      //top side
+	gfx_SetColor(WINNER_COLOR);
+	gfx_Line_NoClip(x1,9,x2,9);      //top side
+	gfx_Line_NoClip(x1,8,x2,8);      //top side
+	}
+}
+
+void loadstage() {
+	trailstart = 0;
+	trailend = 16;
+	growthlength = 128;
+	angle = 0;
+	headx = (32)<<8;
+	heady = (LCD_HEIGHT/2)<<8;
+	memset(&trail,0,sizeof(trail));
+	circlesremain = 10+curstage*ADDITIONAL_CIRCLES_PER_STAGE;
+	redrawplayfield();
 }
 
