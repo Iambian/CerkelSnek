@@ -60,6 +60,7 @@ void redrawplayfield();
 void placetarget();
 void drawthickcircle(int x,int y,uint8_t r,uint8_t c);
 void updatescore();
+void drawpixel(int x,int y,int8_t angle);
 
 
 
@@ -100,9 +101,24 @@ int unsigned curscore;
 void main(void) {
     uint8_t i,j,maintimer,gamestate,tempcolor;
 	int8_t tempangle;
+	int8_t tailangle;
 	int a,b,c,x,y,z;
 	kb_key_t k;
 	void* ptr;
+	uint8_t *cptr;
+	int16_t *xs;
+	int16_t *ys;
+	int16_t *hxs;
+	int16_t *hys;
+	int16_t *txs;
+	int16_t *tys;
+	cptr = (uint8_t*) &x; xs = (int16_t*) (cptr+1);
+	cptr = (uint8_t*) &y; ys = (int16_t*) (cptr+1);
+	cptr = (uint8_t*) &headx; hxs = (int16_t*) (cptr+1);
+	cptr = (uint8_t*) &heady; hys = (int16_t*) (cptr+1);
+	cptr = (uint8_t*) &tailx; txs = (int16_t*) (cptr+1);
+	cptr = (uint8_t*) &taily; tys = (int16_t*) (cptr+1);
+	
 	/* Put in variable initialization here */
 	gfx_Begin(gfx_8bpp);
 	gfx_SetDrawBuffer();
@@ -179,6 +195,7 @@ void main(void) {
 				break;
 				
 			case GS_OPTIONS:
+				highscore.flags |= 1<<F_HYPERUNLOCKED; //DEBUG TO AUTOUNLOCK HYPERSPEED
 				k = kb_Data[1];
 				if (k==kb_2nd) {
 					keywait();
@@ -196,7 +213,10 @@ void main(void) {
 							break;
 					}
 				}
-				if (k==kb_Mode) gamestate = GS_TITLE;
+				if (k==kb_Mode) {
+					keywait();
+					gamestate = GS_TITLE;
+				}
 				k = kb_Data[7];
 				if (k&kb_Up && menuoption) menuoption--;
 				if (k&kb_Down && menuoption<1) menuoption++;
@@ -225,7 +245,10 @@ void main(void) {
 				break;
 				
 			case GS_GAMEPLAY:
-				vsync();
+				i = 1;
+				if (!highscore.difficulty) i++;
+				if (highscore.difficulty==3) i--;
+				for (;i>0;i--) vsync();
 				gfx_BlitBuffer();
 				
 				k = kb_Data[1];
@@ -238,45 +261,57 @@ void main(void) {
 				if (k&kb_Left) angle = (angle-1)&0x3F;
 				if (k&kb_Right) angle = (angle+1)&0x3F;
 				
+				i = 1;
+				if (highscore.difficulty > 1) i++;
+				if (highscore.difficulty > 2) i+=1;
 				
-				//Update head/tail points
-				trail[trailend] = angle;
-				x = headx + costab[angle];
-				y = heady + costab[(angle-16)&0x3F];
-				if (!( ((x>>8)==(headx>>8)) && ((y>>8)==(heady>>8)) )) {
-					//Do pixel-based collision detection here
-					tempcolor = gfx_GetPixel(x>>8,y>>8);
-					if (tempcolor == CERKEL_COLOR) {
-						curscore += 7;
-						growthlength += 16;
-						drawthickcircle(targetx,targety,targetr,0xFF);
-						placetarget();
-						updatescore();
-					} else if (tempcolor != 0xFF) {
-						gamestate = GS_GAMEOVER;
-						break;
+				for (;i>0;i--) {
+				
+					//Update head/tail points
+					trail[trailend] = angle;
+					x = headx + costab[angle]*2;
+					y = heady + costab[(angle-16)&0x3F]*2;
+					if (!( (*xs==*hxs) && (*ys==*hys) )) {
+						//Do pixel-based collision detection here
+						//Just a little further out to avoid self
+						a = x + costab[angle];
+						b = y + costab[(angle-16)&0x3F];
+						tempcolor = gfx_GetPixel(a>>8,b>>8);
+						if (tempcolor == CERKEL_COLOR) {
+							curscore += 7;
+							growthlength += 16;
+							drawthickcircle(targetx,targety,targetr,0xFF);
+							placetarget();
+							updatescore();
+						} else if (tempcolor != 0xFF) {
+							gamestate = GS_GAMEOVER;
+							break;
+						}
 					}
+					if (growthlength) growthlength--;
+					headx = x;
+					heady = y;
+					tailangle = trail[trailstart];
+					//Update table locations
+					trailend = (trailend+1)&0x3FFF;
+					if (!growthlength) trailstart = (trailstart+1)&0x3FFF;
+					//Update pixels
+					gfx_SetColor(0xFF);
+					if (!growthlength) drawpixel(tailx,taily,tailangle);
+					if (!growthlength) {
+						tailx += costab[tailangle]*2;
+						taily += costab[(tailangle-16)&0x3F]*2;
+					}
+					if (!growthlength) drawpixel(tailx,taily,tailangle);
+					gfx_SetColor(SNAKE_COLOR);
+					drawpixel(headx,heady,angle);
 				}
-				if (growthlength) growthlength--;
-				headx = x;
-				heady = y;
-				j = trail[trailstart];
-				if (!growthlength) {
-					tailx += costab[j];
-					taily += costab[(j-16)&0x3F];
-				}
-
-				//Update table locations
-				trailend = (trailend+1)&0x3FFF;
-				if (!growthlength) trailstart = (trailstart+1)&0x3FFF;
-				//Update pixels
-				gfx_SetColor(0xFF);
-				if (!growthlength) gfx_SetPixel(tailx>>8,taily>>8);
-				gfx_SetColor(SNAKE_COLOR);
-				gfx_SetPixel(headx>>8,heady>>8);
 				break;
 				
 			case GS_GAMEOVER:
+				if (curscore > highscore.score[highscore.difficulty]) {
+					highscore.score[highscore.difficulty] = curscore;
+				}
 				keywait();
 				gamestate = GS_TITLE;
 				break;
@@ -336,14 +371,13 @@ void redrawplayfield() {
 	gfx_SetColor(SNAKE_COLOR);
 	x = headx;
 	y = heady;
-	gfx_SetPixel(x>>8,y>>8);
 	//dbg_sprintf(dbgout,"A: %i, B: %i, X: &i, Y: %i\n",(trailend-trailstart)&0x3FFF,b=trailend-1,headx,heady);
 	for(a=(trailend-trailstart)&0x3FFF,b=trailend-1;a>0;a--,b=(b-1)&0x3FFF) {
 		tempangle = (trail[b]+32)&0x3F;  //draw snake backwards
-		x += costab[tempangle];
-		y += costab[(tempangle-16)&0x3F];
+		x += costab[tempangle]*2;
+		y += costab[(tempangle-16)&0x3F]*2;
 		//dbg_sprintf(dbgout,"X,Y,X2,Y2 %i,%i,%i,%i\n",headx>>8,heady>>8,x>>8,y>>8);
-		gfx_SetPixel(x>>8,y>>8);
+		drawpixel(x,y,tempangle);
 	}
 	tailx = x;
 	taily = y;
@@ -392,4 +426,18 @@ void drawthickcircle(int x,int y,uint8_t r,uint8_t c) {
 	}
 }
 
+//This assumes that gfx_SetColor() is appropriately set before use
+void drawpixel(int x,int y,int8_t a) {
+	uint8_t *x_bytes = (uint8_t*) &x;
+	int16_t *xs = (int16_t*) (x_bytes+1);
+	uint8_t *y_bytes = (uint8_t*) &y;
+	int16_t *ys = (int16_t*) (y_bytes+1);
+	gfx_SetPixel(*xs,*ys);
+	x += costab[(a+16)&0x3F];
+	y += costab[(a+0 )&0x3F];
+	gfx_SetPixel(*xs,*ys);
+	x += costab[(a-16)&0x3F]*2;
+	y += costab[(a-32)&0x3F]*2;
+	gfx_SetPixel(*xs,*ys);
+}
 
