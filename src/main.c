@@ -171,7 +171,7 @@ void main(void) {
 						case 0:
 							//init game state here
 							gfx_SetDrawScreen();
-							curscore = 990;
+							curscore = 0;
 							curstage = 1;
 							loadstage();
 							gamestate = GS_GAMEPLAY;
