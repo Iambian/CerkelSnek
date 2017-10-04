@@ -1,9 +1,9 @@
 /*
  *--------------------------------------
  * Program Name: Cerkel Snek
- * Author:
- * License:
- * Description:
+ * Author: Rodger "Iambian" Weisman
+ * License: MIT
+ * Description: Nom noms, sneak through doors, don't hit yourself or walls.
  *--------------------------------------
 */
 #define VERSION_INFO "v0.1"
