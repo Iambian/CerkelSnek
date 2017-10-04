@@ -38,11 +38,11 @@ Controls
 --------
 On the title screen:
 
-|   Keys      |  Function              |
-|------------:|:-----------------------|
-|[Up],[Down]  | Change menu options    |
-|[2nd]        | Select menu option     |
-|[Mode]       | Go back/quit game      |
+|   Keys      |  Function                 |
+|------------:|:--------------------------|
+|[Up],[Down]  | Change menu options       |
+|[2nd]        | Select/toggle menu option |
+|[Mode]       | Go back/quit game         |
 
 In the game:
    

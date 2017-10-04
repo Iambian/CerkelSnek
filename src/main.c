@@ -30,6 +30,7 @@
 #define GS_OPTIONS 1
 #define GS_GAMEPLAY 2
 #define GS_GAMEOVER 3
+#define GS_ABOUT 4
 
 #define F_HYPERUNLOCKED 0
 
@@ -83,7 +84,7 @@ void longwait();
 
 /* Put all your globals here */
 char* title1 = "Cerkel Snek";
-char* menuopt[] = {"Start Game","Options","Quit Game"};
+char* menuopt[] = {"Start Game","Options","About","Quit Game"};
 char* menudiff[] = {"Slow","Medium","Fast","Hyper","Nope Rope"};
 
 char* gameoverdesc[] = {"Lol u died","Git gud nub","U maed snek sad","Sr. Booplesnoot!"};
@@ -181,6 +182,10 @@ void main(void) {
 							menuoption = 0;
 							break;
 						case 2:
+							keywait();
+							gamestate = GS_ABOUT;
+							break;
+						case 3:
 							putaway();
 							break;
 						default:
@@ -191,14 +196,14 @@ void main(void) {
 				if (k==kb_Mode) putaway();
 				k = kb_Data[7];
 				if (k&kb_Up && menuoption) menuoption--;
-				if (k&kb_Down && menuoption<2) menuoption++;
+				if (k&kb_Down && menuoption<3) menuoption++;
 				if (k&(kb_Up|kb_Down)) keywait();
 				
 				drawtitle();
 				gfx_SetTextScale(2,2);
-				for(i=0;i<3;i++) {
+				for(i=0;i<4;i++) {
 					if (menuoption==i) gfx_SetTextFGColor(0x4F);  // SELECTED OPT COLOR
-					centerstr(menuopt[i],i*24+84);
+					centerstr(menuopt[i],i*24+72);
 					gfx_SetTextFGColor(0x00);
 				}
 				gfx_SetTextScale(1,1);
@@ -375,6 +380,23 @@ void main(void) {
 				gamestate = GS_TITLE;
 				break;
 				
+			case GS_ABOUT:
+				k = kb_Data[1];
+				if (k) {
+					keywait();
+					gamestate = GS_TITLE;
+					break;
+				}
+				drawtitle();
+				gfx_PrintStringXY("Copyright 2017 Rodger \"Iambian\" Weisman",5,80);
+				gfx_PrintStringXY("Released under the MIT License",5,90);
+				gfx_PrintStringXY("Source on GitHub:",5,100);
+				gfx_PrintStringXY("https://github.com/Iambian/CerkelSnek",5,110);
+				gfx_PrintStringXY("Game inspired from \"Uncle Worm\" by Badja",5,130);
+				gfx_PrintStringXY("Special thanks to:",5,150);
+				gfx_PrintStringXY("Tim \"Geekboy1011\" Keller",5,160);
+				gfx_SwapDraw();
+
 			default:
 				break;
 		}
