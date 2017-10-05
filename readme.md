@@ -75,6 +75,6 @@ Version History
 ---------------
 * 0.1 - Initial release.
 * 0.2 - Fixed snake aliasing, added additional error recovery,
-        and tweaked scoring.
+        tweaked scoring, merged option menu to main menu.
    
    

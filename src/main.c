@@ -100,9 +100,8 @@ void drawnotice(char **strings,uint8_t numlines);
 /*---------------------------------------------------------------------------*/
 /* Put all your globals here */
 char* title1 = "Cerkel Snek";
-char* menuopt[] = {"Start Game","Options","About","Quit Game"};
+char* menuopt[] = {"Start Game","Change Speed","About","Quit Game"};
 char* menudiff[] = {"Slow","Medium","Fast","Hyper","Nope Rope"};
-char* optopts[] = {"Change difficulty","Go back to main menu"};
 char* unlockedhyper[] = {"Congratulations!","You unlocked:","Hyper speed mode"};
 char* oobrecovery[] = {"You know you're not","supposed to beat a","stage that way, right?"};
 
@@ -207,8 +206,9 @@ void main(void) {
 							gamestate = GS_GAMEPLAY;
 							break;
 						case 1:
-							gamestate = GS_OPTIONS;
-							menuoption = 0;
+							highscore.difficulty++;
+							j = (highscore.flags&(1<<F_HYPERUNLOCKED)) ? 3 : 2;
+							if (highscore.difficulty>j)	highscore.difficulty = 0;
 							break;
 						case 2:
 							keywait();
@@ -223,6 +223,7 @@ void main(void) {
 					break;
 				}
 				if (k==kb_Mode) putaway();
+				if (k==kb_Yequ) highscore.difficulty = 4;
 				drawtitle();
 				move_and_draw_menuopts(menuopt,4,&menuoption);
 				gfx_SetTextXY(5,230);
@@ -233,45 +234,12 @@ void main(void) {
 				gfx_SwapDraw();
 				break;
 				
-			case GS_OPTIONS:
-				k = kb_Data[1];
-				if (k==kb_Yequ) highscore.difficulty = 4;
-				if (k==kb_2nd) {
-					keywait();
-					switch(menuoption) {
-						case 0:
-							highscore.difficulty++;
-							j = (highscore.flags&(1<<F_HYPERUNLOCKED)) ? 3 : 2;
-							if (highscore.difficulty>j)	highscore.difficulty = 0;
-							break;
-						case 1:
-							gamestate = GS_TITLE;
-							menuoption = 1;
-							break;
-						default:
-							break;
-					}
-				}
-				if (k==kb_Mode) {
-					keywait();
-					gamestate = GS_TITLE;
-					break;
-				}
-				drawtitle();
-				move_and_draw_menuopts(optopts,2,&menuoption);
-				gfx_SetTextXY(5,230);
-				gfx_PrintString("Current difficulty: ");
-				gfx_PrintString(menudiff[highscore.difficulty]);
-				
-				gfx_SwapDraw();
-				break;
-				
 			case GS_GAMEPLAY:
 				a = 0x0001;
 				switch(highscore.difficulty) {
-					case 0: vsync();vsync();break;
-					case 1: vsync();break;
-					case 2: a+=0x0800;
+					case 0: vsync();
+					case 1: vsync();
+					case 2: vsync();
 					case 3: a+=0x0800;
 					case 4: ;
 					for(;a>0;a--);
@@ -508,10 +476,10 @@ void drawthickcircle(int x,int y,uint8_t r,uint8_t c) {
 	}
 }
 
-#define SIZEOF_ERASEARRAY (13*2)
+#define SIZEOF_ERASEARRAY (12*2)
 int8_t erasearray[] = {					 0,-2,
 								-1,-1,	 0,-1,	 1,-1,
-						-2, 0,	-1, 0,	 0, 0,	 1, 0,	 2, 0,
+						-2, 0,	-1, 0,	 		 1, 0,	 2, 0,
 								-1, 1,	 0, 1,	 1, 1,
 										 0, 2,					};
 										 
@@ -526,13 +494,14 @@ void erasepixel(fp16_8 x,fp16_8 y,int8_t a) {
 // Graydient is 0x00, 0x4A, 0xB5, 0xFF
 void drawpixel(fp16_8 x,fp16_8 y,int8_t a) {
 	uint8_t c,i,t,newc;
+	fp16_8 xt,yt;
 	gfx_SetColor(0x00);
-	//gfx_SetPixel(x->p.ipart,y->p.ipart);
+	gfx_SetPixel(x.p.ipart,y.p.ipart);
 	for (i=0;i<8;i++,a=(a+8)&0x3F) {
-		x.fp += costab[a+0 ];
-		y.fp += costab[a-16];
-		c = gfx_GetPixel(x.p.ipart,y.p.ipart);
-		t = (uint8_t) (((x.p.fpart>>6)&0x03)|((y.p.fpart>>4)&(0x03<<2)))&0x0F;
+		xt.fp = x.fp + (costab[a+0 ]*2);
+		yt.fp = y.fp + (costab[a-16]*2);
+		c = gfx_GetPixel(xt.p.ipart,yt.p.ipart);
+		t = (uint8_t) (((xt.p.fpart>>6)&0x03)|((yt.p.fpart>>4)&(0x03<<2)))&0x0F;
 		t = graydient[t];
 		//dbg_sprintf(dbgout,"CC %i, MathC %i\n",c,t);
 		switch (c) {
@@ -552,7 +521,7 @@ void drawpixel(fp16_8 x,fp16_8 y,int8_t a) {
 				break;
 		}
 		gfx_SetColor(newc);
-		gfx_SetPixel(x.p.ipart,y.p.ipart);
+		gfx_SetPixel(xt.p.ipart,yt.p.ipart);
 	}
 }
 
