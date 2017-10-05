@@ -26,7 +26,7 @@ To run without a shell, follow these steps:
 1. Turn on the calculator and make sure you're on the home screen.
 2. Then push the following keys in order:
    [CLEAR] [2nd] [0] [DOWN] [DOWN] [DOWN] [DOWN] [DOWN] [DOWN] [ENTER]
-3. Push [PRGM] then move the cursor down until LANDLOON is selected.
+3. Push [PRGM] then move the cursor down until CERKSNEK is selected.
    When you have done that, push [ENTER]
 4. Your homescreen should look something like:
 

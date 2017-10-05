@@ -6,13 +6,13 @@
  * Description: Nom noms, sneak through doors, don't hit yourself or walls.
  *--------------------------------------
 */
-#define VERSION_INFO "v0.1"
+#define VERSION_INFO "v0.2"
 
 #define TRANSPARENT_COLOR 0xF8
 #define GREETINGS_DIALOG_TEXT_COLOR 0xDF
 #define DIALOG_BOX_COLOR 0x08
 
-#define SNAKE_COLOR 0x62
+#define SNAKE_COLOR 0x00
 #define CERKEL_COLOR 0xE0
 #define WINNER_COLOR 0x87
 
@@ -25,6 +25,9 @@
 #define BASE_CIRCLES_PER_STAGE 10
 #define ADDITIONAL_CIRCLES_PER_STAGE 3
 #define SNAKE_GROWTH_RATE 64
+
+#define BASE_POINTS_PER_CERKEL 6
+#define CERKEL_POINTS_STAGE_FACTOR 1
 
 #define GS_TITLE 0
 #define GS_OPTIONS 1
@@ -59,6 +62,16 @@
 #include <decompress.h>
 #include <fileioc.h>
 
+typedef union fp16_8 {
+	int fp;
+	struct {
+		uint8_t fpart;
+		int16_t ipart;
+	} p;
+} fp16_8;
+fp16_8 curx,cury,dx,dy,maxspeed,gravity,thrust;
+
+
 /* Put your function prototypes here */
 
  
@@ -72,7 +85,10 @@ void redrawplayfield();
 void placetarget();
 void drawthickcircle(int x,int y,uint8_t r,uint8_t c);
 void updatescore();
+void erasepixel(int x,int y,int8_t a);
+void ploterase(fp16_8* x, fp16_8* y,uint8_t a);
 void drawpixel(int x,int y,int8_t angle);
+void plotpixel(fp16_8* x, fp16_8* y,uint8_t a);
 void drawcorners(uint8_t gap);
 
 void drawtitle();
@@ -94,6 +110,10 @@ int8_t costab[] = {127,126,124,121,117,112,105,98,89,80,70,59,48,36,24,12,
 				-127,-126,-124,-121,-117,-112,-105,-98,-89,-80,-70,-59,-48,-36,-24,-12,
 				0,12,24,36,48,59,70,80,89,98,105,112,117,121,124,126};
 //
+uint8_t graydient[] = {	0xB5,0x4A,0x4A,0xB5,
+						0x4A,0x00,0x00,0x4A,
+						0x4A,0x00,0x00,0x4A,
+						0xB5,0x4A,0x4A,0xB5};
 ti_var_t slot;
 struct { int score[5]; uint8_t difficulty; uint8_t flags;} highscore;
 char* highscorefile = "CERSNDAT";
@@ -137,6 +157,7 @@ void main(void) {
 	int16_t *txs;
 	int16_t *tys;
 	char* tmp_str;
+	uint8_t frameskip = 0;
 	cptr = (uint8_t*) &x; xs = (int16_t*) (cptr+1);
 	cptr = (uint8_t*) &y; ys = (int16_t*) (cptr+1);
 	cptr = (uint8_t*) &headx; hxs = (int16_t*) (cptr+1);
@@ -286,7 +307,7 @@ void main(void) {
 				if (k&kb_Left) angle = (angle-1)&0x3F;
 				if (k&kb_Right) angle = (angle+1)&0x3F;
 				
-				//for (i=(highscore.difficulty)?2:1;i>0;i--) {
+				for (i=2;i>0;i--) {
 				
 					//Update head/tail points
 					trail[trailend] = angle;
@@ -295,11 +316,11 @@ void main(void) {
 					if (!( (*xs==*hxs) && (*ys==*hys) )) {
 						//Do pixel-based collision detection here
 						//Just a little further out to avoid self
-						a = x + costab[angle];
-						b = y + costab[(angle-16)&0x3F];
+						a = x + costab[angle]*3;
+						b = y + costab[(angle-16)&0x3F]*3;
 						tempcolor = gfx_GetPixel(a>>8,b>>8);
 						if (tempcolor == CERKEL_COLOR) {
-							curscore += 7;
+							curscore += BASE_POINTS_PER_CERKEL+CERKEL_POINTS_STAGE_FACTOR*curstage;
 							growthlength += SNAKE_GROWTH_RATE;
 							drawthickcircle(targetx,targety,targetr,0xFF);
 							if (!--circlesremain) {
@@ -315,7 +336,18 @@ void main(void) {
 							//
 							loadstage();
 							break;
-						} else if (tempcolor != 0xFF) {
+						} else if (x<(1<<8) || y<(1<<8) || x>(319<<8) || y>(239<<8)) {
+							curstage++;
+							loadstage();
+							gfx_SetColor(CERKEL_COLOR);
+							gfx_SetTextBGColor(CERKEL_COLOR);
+							gfx_FillRectangle(GMBOX_X,GMBOX_Y,GMBOX_W,GMBOX_H);
+							centerstr("You know you're not",GMBOX_Y+10);
+							centerstr("supposed to beat a",GMBOX_Y+25);
+							centerstr("stage that way, right?",GMBOX_Y+40);
+							gfx_SetTextBGColor(0xFF);
+							break;
+						}	else if (tempcolor != 0xFF) {
 							gamestate = GS_GAMEOVER;
 							break;
 						}
@@ -329,15 +361,15 @@ void main(void) {
 					if (!growthlength) trailstart = (trailstart+1)&0x3FFF;
 					//Update pixels
 					gfx_SetColor(0xFF);
-					if (!growthlength) drawpixel(tailx,taily,tailangle);
+					if (!growthlength) erasepixel(tailx,taily,tailangle); ///###
 					if (!growthlength) {
 						tailx += costab[tailangle]*2;
 						taily += costab[(tailangle-16)&0x3F]*2;
 					}
-					if (!growthlength) drawpixel(tailx,taily,tailangle);
+//					if (!growthlength) erasepixel(tailx,taily,tailangle); ///###
 					gfx_SetColor(SNAKE_COLOR);
-					drawpixel(headx,heady,angle);
-				//}
+					drawpixel(headx,heady,angle); ///###
+				}
 				break;
 				
 			case GS_GAMEOVER:
@@ -444,7 +476,7 @@ void centerstr(char* s, uint8_t y) {
 
 void redrawplayfield() {
 	int x,y,a,b;
-	int8_t tempangle;
+	int8_t tempangle=0;
 	gfx_SetDrawScreen();
 	//Prepare draw area
 	gfx_FillScreen(0xFF);
@@ -458,11 +490,11 @@ void redrawplayfield() {
 		tempangle = (trail[b]+32)&0x3F;  //draw snake backwards
 		x += costab[tempangle]*2;
 		y += costab[(tempangle-16)&0x3F]*2;
-		//dbg_sprintf(dbgout,"X,Y,X2,Y2 %i,%i,%i,%i\n",headx>>8,heady>>8,x>>8,y>>8);
 		drawpixel(x,y,tempangle);
+		//dbg_sprintf(dbgout,"X,Y,X2,Y2 %i,%i,%i,%i\n",headx>>8,heady>>8,x>>8,y>>8);
 	}
-	tailx = x;
-	taily = y;
+	tailx = x ;
+	taily = y ;
 	placetarget();
 	updatescore();
 	drawcorners(0);
@@ -515,20 +547,76 @@ void drawthickcircle(int x,int y,uint8_t r,uint8_t c) {
 	}
 }
 
+
+void erasepixel(int x,int y,int8_t a) {
+	uint8_t i;
+	fp16_8 *xu = (fp16_8*) &x;
+	fp16_8 *yu = (fp16_8*) &y;
+//		ploterase(xu,yu,a);
+		a += 16;
+		x += costab[(a+0 )&0x3F];
+		y += costab[(a-16)&0x3F];
+		ploterase(xu,yu,a);
+		a -= 32;
+		x += costab[(a+0 )&0x3F];
+		y += costab[(a-16)&0x3F];
+		ploterase(xu,yu,a);
+}
+
+void ploterase(fp16_8* x, fp16_8* y,uint8_t a) {
+	uint8_t c,i,t,newc;
+	fp16_8 xs,ys;
+	gfx_SetColor(0xFF);
+	gfx_SetPixel(x->p.ipart,y->p.ipart);
+	for (i=0;i<8;i++,a=(a+8)&0x3F) {
+		xs.fp = x->fp + costab[(a+0 )&0x3F]*2;
+		ys.fp = y->fp + costab[(a-16)&0x3F]*2;
+		newc = 0xFF; //SAFETY DEBUG: ERASE ALL PIXELS. LATER, DO SUBTRACTIVE SHADING
+		gfx_SetColor(newc);
+		gfx_SetPixel(xs.p.ipart,ys.p.ipart);
+	}
+}
+
 //This assumes that gfx_SetColor() is appropriately set before use
 void drawpixel(int x,int y,int8_t a) {
-	uint8_t *x_bytes = (uint8_t*) &x;
-	int16_t *xs = (int16_t*) (x_bytes+1);
-	uint8_t *y_bytes = (uint8_t*) &y;
-	int16_t *ys = (int16_t*) (y_bytes+1);
-	gfx_SetPixel(*xs,*ys);
-	x += costab[(a+16)&0x3F];
-	y += costab[(a+0 )&0x3F];
-	gfx_SetPixel(*xs,*ys);
-	x += costab[(a-16)&0x3F]*2;
-	y += costab[(a-32)&0x3F]*2;
-	gfx_SetPixel(*xs,*ys);
+	fp16_8 *xu = (fp16_8*) &x;
+	fp16_8 *yu = (fp16_8*) &y;
+	plotpixel(xu,yu,a);
 }
+// Graydient is 0x00, 0x4A, 0xB5, 0xFF
+void plotpixel(fp16_8* x, fp16_8* y,uint8_t a) {
+	uint8_t c,i,t,newc;
+	fp16_8 xs,ys;
+	gfx_SetColor(0x00);
+	//gfx_SetPixel(x->p.ipart,y->p.ipart);
+	for (i=0;i<8;i++,a=(a+8)&0x3F) {
+		xs.fp = x->fp + costab[(a+0 )&0x3F];
+		ys.fp = y->fp + costab[(a-16)&0x3F];
+		c = gfx_GetPixel(xs.p.ipart,ys.p.ipart);
+		t = (uint8_t) (((xs.p.fpart>>6)&0x03)|((ys.p.fpart>>4)&(0x03<<2)))&0x0F;
+		t = graydient[t];
+		//dbg_sprintf(dbgout,"CC %i, MathC %i\n",c,t);
+		switch (c) {
+			case 0x00:
+			case 0x4A:
+				newc = 0x00;
+				break;
+			case 0xB5:
+				if (t==0xB5) { newc = 0x4A; }
+				else { newc = 0x00;}
+				break;
+			case 0xFF:
+				newc = t;
+				break;
+			default:
+				newc = c;
+				break;
+		}
+		gfx_SetColor(newc);
+		gfx_SetPixel(xs.p.ipart,ys.p.ipart);
+	}
+}
+
 
 void drawtitle() {
 	gfx_FillScreen(0xFF);
@@ -584,7 +672,7 @@ void drawcorners(uint8_t gap) {
 void loadstage() {
 	trailstart = 0;
 	trailend = 1;
-	growthlength = 128;
+	growthlength = 64;
 	angle = 64-16;
 	headx = (LCD_WIDTH/2)<<8;
 	heady = (WINDOW_HEIGHT)<<8;
