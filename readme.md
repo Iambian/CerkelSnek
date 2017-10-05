@@ -74,6 +74,7 @@ I use the BSD license for this project. See `LICENSE` for more details.
 Version History
 ---------------
 * 0.1 - Initial release.
-   
+* 0.2 - Fixed snake aliasing, added additional error recovery,
+        and tweaked scoring.
    
    

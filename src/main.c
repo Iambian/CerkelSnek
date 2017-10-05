@@ -71,9 +71,8 @@ typedef union fp16_8 {
 } fp16_8;
 fp16_8 curx,cury,dx,dy,maxspeed,gravity,thrust;
 
-
+/*---------------------------------------------------------------------------*/
 /* Put your function prototypes here */
-
  
 void vsync();
 void putaway();
@@ -85,10 +84,8 @@ void redrawplayfield();
 void placetarget();
 void drawthickcircle(int x,int y,uint8_t r,uint8_t c);
 void updatescore();
-void erasepixel(int x,int y,int8_t a);
-void ploterase(fp16_8* x, fp16_8* y,uint8_t a);
-void drawpixel(int x,int y,int8_t angle);
-void plotpixel(fp16_8* x, fp16_8* y,uint8_t a);
+void erasepixel(fp16_8 x,fp16_8 y,int8_t a);
+void drawpixel(fp16_8 x,fp16_8 y,int8_t angle);
 void drawcorners(uint8_t gap);
 
 void drawtitle();
@@ -97,37 +94,58 @@ void flashscreen();
 void sethighscore();
 void longwait();
 
+void move_and_draw_menuopts(char **optarr,uint8_t numopts,uint8_t *curopts);
+void drawnotice(char **strings,uint8_t numlines);
 
+/*---------------------------------------------------------------------------*/
 /* Put all your globals here */
 char* title1 = "Cerkel Snek";
 char* menuopt[] = {"Start Game","Options","About","Quit Game"};
 char* menudiff[] = {"Slow","Medium","Fast","Hyper","Nope Rope"};
+char* optopts[] = {"Change difficulty","Go back to main menu"};
+char* unlockedhyper[] = {"Congratulations!","You unlocked:","Hyper speed mode"};
+char* oobrecovery[] = {"You know you're not","supposed to beat a","stage that way, right?"};
 
 char* gameoverdesc[] = {"Lol u died","Git gud nub","U maed snek sad","Sr. Booplesnoot!"};
 //[cos(a),sin(a-16)]
-int8_t costab[] = {127,126,124,121,117,112,105,98,89,80,70,59,48,36,24,12,
+//This table is twice the size required to allow removal
+//of extra bitmath during internal use.
+int8_t tt[] =	{-127,-126,-124,-121,-117,-112,-105,-98,-89,-80,-70,-59,-48,-36,-24,-12,
+				0,12,24,36,48,59,70,80,89,98,105,112,117,121,124,126,
+				127,126,124,121,117,112,105,98,89,80,70,59,48,36,24,12,
 				0,-12,-24,-36,-48,-59,-70,-80,-89,-98,-105,-112,-117,-121,-124,-126,
 				-127,-126,-124,-121,-117,-112,-105,-98,-89,-80,-70,-59,-48,-36,-24,-12,
-				0,12,24,36,48,59,70,80,89,98,105,112,117,121,124,126};
+				0,12,24,36,48,59,70,80,89,98,105,112,117,121,124,126,
+				127,126,124,121,117,112,105,98,89,80,70,59,48,36,24,12,
+				0,-12,-24,-36,-48,-59,-70,-80,-89,-98,-105,-112,-117,-121,-124,-126};
+int8_t* costab;
 //
 uint8_t graydient[] = {	0xB5,0x4A,0x4A,0xB5,
 						0x4A,0x00,0x00,0x4A,
 						0x4A,0x00,0x00,0x4A,
 						0xB5,0x4A,0x4A,0xB5};
 ti_var_t slot;
+
+#define CREDITS_LENGTH 7
+char* creditstrings[] = { 	"Copyright 2017 Rodger \"Iambian\" Weisman",
+							"Released under the MIT License",
+							"Source on GitHub:",
+							"https://github.com/Iambian/CerkelSnek",
+							"Game inspired from \"Uncle Worm\" by Badja",
+							"Special thanks to:",
+							"Tim \"Geekboy1011\" Keller", };
+uint8_t creditypos[] = { 80,90,100,110,130,150,160 };
+							
+
+
 struct { int score[5]; uint8_t difficulty; uint8_t flags;} highscore;
 char* highscorefile = "CERSNDAT";
 //
-uint8_t menuoption;
-// If somebody decided to TAS this game, this should theoretically contain the entire
-// screen given play area 320x240 and circle radius is (64/pi) where 64 angles
-// of unit 2 composes each circle. Calc round up, plus one to handle nibbling yourself.
-// And bumped up to the nearest power of two to make us a circular buffer.
 int8_t trail[16384];
 int8_t angle;
 int trailstart,trailend;
-int headx,heady;
-int tailx,taily;
+fp16_8 headx,heady;
+fp16_8 tailx,taily;
 uint8_t growthlength;
 
 int targetx,targety;
@@ -140,31 +158,21 @@ uint8_t circlesremain;
 
 
 
+/*---------------------------------------------------------------------------*/
 /* Program starts here */
 void main(void) {
     uint8_t i,j,maintimer,gamestate,tempcolor;
-	int8_t tempangle;
+	uint8_t menuoption;
+	int8_t tempangle,tx,ty;
 	int8_t tailangle;
-	int a,b,c,x,y,z;
+	int a,b,c,z;
+	fp16_8 x,y;
 	kb_key_t k;
 	void* ptr;
 	uint8_t *bytearray;
 	uint8_t *cptr;
-	int16_t *xs;
-	int16_t *ys;
-	int16_t *hxs;
-	int16_t *hys;
-	int16_t *txs;
-	int16_t *tys;
 	char* tmp_str;
-	uint8_t frameskip = 0;
-	cptr = (uint8_t*) &x; xs = (int16_t*) (cptr+1);
-	cptr = (uint8_t*) &y; ys = (int16_t*) (cptr+1);
-	cptr = (uint8_t*) &headx; hxs = (int16_t*) (cptr+1);
-	cptr = (uint8_t*) &heady; hys = (int16_t*) (cptr+1);
-	cptr = (uint8_t*) &tailx; txs = (int16_t*) (cptr+1);
-	cptr = (uint8_t*) &taily; tys = (int16_t*) (cptr+1);
-	
+	char* gameoverstr[2];
 	/* Put in variable initialization here */
 	gfx_Begin(gfx_8bpp);
 	gfx_SetDrawBuffer();
@@ -178,10 +186,10 @@ void main(void) {
 		ti_Read(&highscore,sizeof(highscore),1,slot);
 	}
 	ti_CloseAll();
+	costab = tt+32;  //magic
+	gameoverstr[1] = "Game Over";
 	/* Main Loop */
 	menuoption = maintimer = gamestate = 0;
-	
-	
 	while (1) {
 		kb_Scan();
 		switch(gamestate) {
@@ -215,19 +223,8 @@ void main(void) {
 					break;
 				}
 				if (k==kb_Mode) putaway();
-				k = kb_Data[7];
-				if (k&kb_Up && menuoption) menuoption--;
-				if (k&kb_Down && menuoption<3) menuoption++;
-				if (k&(kb_Up|kb_Down)) keywait();
-				
 				drawtitle();
-				gfx_SetTextScale(2,2);
-				for(i=0;i<4;i++) {
-					if (menuoption==i) gfx_SetTextFGColor(0x4F);  // SELECTED OPT COLOR
-					centerstr(menuopt[i],i*24+72);
-					gfx_SetTextFGColor(0x00);
-				}
-				gfx_SetTextScale(1,1);
+				move_and_draw_menuopts(menuopt,4,&menuoption);
 				gfx_SetTextXY(5,230);
 				gfx_PrintString("High score ( ");
 				gfx_PrintString(menudiff[highscore.difficulty]);
@@ -260,23 +257,8 @@ void main(void) {
 					gamestate = GS_TITLE;
 					break;
 				}
-				k = kb_Data[7];
-				if (k&kb_Up && menuoption) menuoption--;
-				if (k&kb_Down && menuoption<1) menuoption++;
-				if (k&(kb_Up|kb_Down)) keywait();
-				
 				drawtitle();
-				gfx_SetTextScale(2,2);			
-				
-				if (menuoption==0) gfx_SetTextFGColor(0x4F);
-				centerstr("Change difficulty",(240-(2*24))/2+(0*24));
-				gfx_SetTextFGColor(0x00);
-				
-				if (menuoption==1) gfx_SetTextFGColor(0x4F);
-				centerstr("Go back to main menu",(240-(2*24))/2+(1*24));
-				gfx_SetTextFGColor(0x00);
-				
-				gfx_SetTextScale(1,1);
+				move_and_draw_menuopts(optopts,2,&menuoption);
 				gfx_SetTextXY(5,230);
 				gfx_PrintString("Current difficulty: ");
 				gfx_PrintString(menudiff[highscore.difficulty]);
@@ -285,7 +267,6 @@ void main(void) {
 				break;
 				
 			case GS_GAMEPLAY:
-				i = 1;
 				a = 0x0001;
 				switch(highscore.difficulty) {
 					case 0: vsync();vsync();break;
@@ -311,50 +292,42 @@ void main(void) {
 				
 					//Update head/tail points
 					trail[trailend] = angle;
-					x = headx + costab[angle]*2;
-					y = heady + costab[(angle-16)&0x3F]*2;
-					if (!( (*xs==*hxs) && (*ys==*hys) )) {
-						//Do pixel-based collision detection here
-						//Just a little further out to avoid self
-						a = x + costab[angle]*3;
-						b = y + costab[(angle-16)&0x3F]*3;
-						tempcolor = gfx_GetPixel(a>>8,b>>8);
-						if (tempcolor == CERKEL_COLOR) {
-							curscore += BASE_POINTS_PER_CERKEL+CERKEL_POINTS_STAGE_FACTOR*curstage;
-							growthlength += SNAKE_GROWTH_RATE;
-							drawthickcircle(targetx,targety,targetr,0xFF);
-							if (!--circlesremain) {
-								drawcorners(1);
-							} else {
-								placetarget();
-							}
-							updatescore();
-						} else if (tempcolor == WINNER_COLOR) {
-							curstage++;
-							//
-							// Advance to next stage notice
-							//
-							loadstage();
-							break;
-						} else if (x<(1<<8) || y<(1<<8) || x>(319<<8) || y>(239<<8)) {
-							curstage++;
-							loadstage();
-							gfx_SetColor(CERKEL_COLOR);
-							gfx_SetTextBGColor(CERKEL_COLOR);
-							gfx_FillRectangle(GMBOX_X,GMBOX_Y,GMBOX_W,GMBOX_H);
-							centerstr("You know you're not",GMBOX_Y+10);
-							centerstr("supposed to beat a",GMBOX_Y+25);
-							centerstr("stage that way, right?",GMBOX_Y+40);
-							gfx_SetTextBGColor(0xFF);
-							break;
-						}	else if (tempcolor != 0xFF) {
-							gamestate = GS_GAMEOVER;
-							break;
+					tx = costab[angle];
+					ty = costab[angle-16];
+					headx.fp += tx*2;
+					heady.fp += ty*2;
+					x.fp = headx.fp + tx*3;
+					y.fp = heady.fp + ty*3;
+					//dbg_sprintf(dbgout,"tx %i, ty %i, hx %i, hy %i, x %i, y %i\n",tx,ty,headx.p.ipart,heady.p.ipart,x.p.ipart,y.p.ipart);
+					tempcolor = gfx_GetPixel(x.p.ipart,y.p.ipart);
+					if (tempcolor == CERKEL_COLOR) {
+						curscore += BASE_POINTS_PER_CERKEL+CERKEL_POINTS_STAGE_FACTOR*curstage;
+						growthlength += SNAKE_GROWTH_RATE;
+						drawthickcircle(targetx,targety,targetr,0xFF);
+						if (!--circlesremain) {
+							drawcorners(1);
+						} else {
+							placetarget();
 						}
+						updatescore();
+					} else if (tempcolor == WINNER_COLOR) {
+						curstage++;
+						// TODO: Add advance to next stage notice
+						loadstage();
+						break;
+					} else if (x.p.ipart<1 || y.p.ipart<1 || x.p.ipart>319 || y.p.ipart>239) {
+						curstage++;
+						loadstage();
+						gfx_SetColor(CERKEL_COLOR);
+						gfx_SetTextBGColor(CERKEL_COLOR);
+						drawnotice(oobrecovery,3);
+						gfx_SetTextBGColor(0xFF);
+						break;
+					}	else if (tempcolor != 0xFF) {
+						gamestate = GS_GAMEOVER;
+						break;
 					}
 					if (growthlength) growthlength--;
-					headx = x;
-					heady = y;
 					tailangle = trail[trailstart];
 					//Update table locations
 					trailend = (trailend+1)&0x3FFF;
@@ -363,8 +336,8 @@ void main(void) {
 					gfx_SetColor(0xFF);
 					if (!growthlength) erasepixel(tailx,taily,tailangle); ///###
 					if (!growthlength) {
-						tailx += costab[tailangle]*2;
-						taily += costab[(tailangle-16)&0x3F]*2;
+						tailx.fp += costab[tailangle]*2;
+						taily.fp += costab[tailangle-16]*2;
 					}
 //					if (!growthlength) erasepixel(tailx,taily,tailangle); ///###
 					gfx_SetColor(SNAKE_COLOR);
@@ -386,24 +359,18 @@ void main(void) {
 					gfx_SwapDraw();
 					for(a=0xF000;a>0;a--);
 				}
-				gfx_SetTextScale(1,1);
 				gfx_SetColor(DIALOG_BOX_COLOR);  //xlibc dark blue
-				gfx_FillRectangle(GMBOX_X,GMBOX_Y,GMBOX_W,GMBOX_H);
-				tmp_str = gameoverdesc[randInt(0,3)];
-				gfx_GetStringWidth(tmp_str);
 				gfx_SetTextFGColor(GREETINGS_DIALOG_TEXT_COLOR);
 				gfx_SetTextBGColor(DIALOG_BOX_COLOR);
-				centerstr(tmp_str,GMBOX_Y+15);
-				centerstr("Game over",GMBOX_Y+35);
+				gameoverstr[0] = gameoverdesc[randInt(0,3)];
+				drawnotice(gameoverstr,2); //### RENDER GAME OVER BOX
 				gfx_SwapDraw();
+				
 				waitanykey();
 				if (!(highscore.flags&(1<<F_HYPERUNLOCKED)) && (highscore.difficulty == 2) && (curscore > 1000)) {
 					gfx_BlitScreen();
 					highscore.flags |= 1<<F_HYPERUNLOCKED;
-					gfx_FillRectangle(GMBOX_X,GMBOX_Y,GMBOX_W,GMBOX_H);
-					centerstr("Congratulations!",GMBOX_Y+10);
-					centerstr("You unlocked:",GMBOX_Y+25);
-					centerstr("Hyper speed mode",GMBOX_Y+40);
+					drawnotice(unlockedhyper,3);  //### RENDER HYPERSPEED UNLOCK
 					gfx_SwapDraw();
 					longwait();
 					waitanykey();
@@ -413,21 +380,14 @@ void main(void) {
 				break;
 				
 			case GS_ABOUT:
-				k = kb_Data[1];
-				if (k) {
-					keywait();
-					gamestate = GS_TITLE;
-					break;
-				}
 				drawtitle();
-				gfx_PrintStringXY("Copyright 2017 Rodger \"Iambian\" Weisman",5,80);
-				gfx_PrintStringXY("Released under the MIT License",5,90);
-				gfx_PrintStringXY("Source on GitHub:",5,100);
-				gfx_PrintStringXY("https://github.com/Iambian/CerkelSnek",5,110);
-				gfx_PrintStringXY("Game inspired from \"Uncle Worm\" by Badja",5,130);
-				gfx_PrintStringXY("Special thanks to:",5,150);
-				gfx_PrintStringXY("Tim \"Geekboy1011\" Keller",5,160);
+				/* Print credits */
+				for (i=0;i<CREDITS_LENGTH;i++) {
+					gfx_PrintStringXY(creditstrings[i],5,creditypos[i]);
+				}
 				gfx_SwapDraw();
+				waitanykey();
+				gamestate = GS_TITLE;
 
 			default:
 				break;
@@ -475,8 +435,9 @@ void centerstr(char* s, uint8_t y) {
 
 
 void redrawplayfield() {
-	int x,y,a,b;
-	int8_t tempangle=0;
+	int a,b;
+	fp16_8 x,y;
+	int8_t tempangle;
 	gfx_SetDrawScreen();
 	//Prepare draw area
 	gfx_FillScreen(0xFF);
@@ -488,13 +449,13 @@ void redrawplayfield() {
 	//dbg_sprintf(dbgout,"A: %i, B: %i, X: &i, Y: %i\n",(trailend-trailstart)&0x3FFF,b=trailend-1,headx,heady);
 	for(a=(trailend-trailstart)&0x3FFF,b=trailend-1;a>0;a--,b=(b-1)&0x3FFF) {
 		tempangle = (trail[b]+32)&0x3F;  //draw snake backwards
-		x += costab[tempangle]*2;
-		y += costab[(tempangle-16)&0x3F]*2;
+		x.fp += costab[tempangle]*2;
+		y.fp += costab[tempangle-16]*2;
 		drawpixel(x,y,tempangle);
-		//dbg_sprintf(dbgout,"X,Y,X2,Y2 %i,%i,%i,%i\n",headx>>8,heady>>8,x>>8,y>>8);
+		//dbg_sprintf(dbgout,"X,Y,X2,Y2 %i,%i,%i,%i\n",headx.p.ipart,heady.p.ipart,x.p.ipart,y.p.ipart);
 	}
-	tailx = x ;
-	taily = y ;
+	tailx = x;
+	taily = y;
 	placetarget();
 	updatescore();
 	drawcorners(0);
@@ -511,8 +472,8 @@ void placetarget() {
 	x1 = (LCD_WIDTH-w)>>1;
 	x2 = x1+w;
 	//Current snake head
-	x = headx>>8;
-	y = heady>>8;
+	x = headx.p.ipart;
+	y = heady.p.ipart;
 	acceptable = 0;
 	
 	while (!acceptable) {
@@ -547,53 +508,31 @@ void drawthickcircle(int x,int y,uint8_t r,uint8_t c) {
 	}
 }
 
-
-void erasepixel(int x,int y,int8_t a) {
+#define SIZEOF_ERASEARRAY (13*2)
+int8_t erasearray[] = {					 0,-2,
+								-1,-1,	 0,-1,	 1,-1,
+						-2, 0,	-1, 0,	 0, 0,	 1, 0,	 2, 0,
+								-1, 1,	 0, 1,	 1, 1,
+										 0, 2,					};
+										 
+void erasepixel(fp16_8 x,fp16_8 y,int8_t a) {
 	uint8_t i;
-	fp16_8 *xu = (fp16_8*) &x;
-	fp16_8 *yu = (fp16_8*) &y;
-//		ploterase(xu,yu,a);
-		a += 16;
-		x += costab[(a+0 )&0x3F];
-		y += costab[(a-16)&0x3F];
-		ploterase(xu,yu,a);
-		a -= 32;
-		x += costab[(a+0 )&0x3F];
-		y += costab[(a-16)&0x3F];
-		ploterase(xu,yu,a);
-}
-
-void ploterase(fp16_8* x, fp16_8* y,uint8_t a) {
-	uint8_t c,i,t,newc;
-	fp16_8 xs,ys;
 	gfx_SetColor(0xFF);
-	gfx_SetPixel(x->p.ipart,y->p.ipart);
-	for (i=0;i<8;i++,a=(a+8)&0x3F) {
-		xs.fp = x->fp + costab[(a+0 )&0x3F]*2;
-		ys.fp = y->fp + costab[(a-16)&0x3F]*2;
-		newc = 0xFF; //SAFETY DEBUG: ERASE ALL PIXELS. LATER, DO SUBTRACTIVE SHADING
-		gfx_SetColor(newc);
-		gfx_SetPixel(xs.p.ipart,ys.p.ipart);
+	for(i=0;i<SIZEOF_ERASEARRAY;i+=2) {
+		gfx_SetPixel(x.p.ipart+erasearray[i+0],y.p.ipart+erasearray[i+1]);
 	}
 }
 
-//This assumes that gfx_SetColor() is appropriately set before use
-void drawpixel(int x,int y,int8_t a) {
-	fp16_8 *xu = (fp16_8*) &x;
-	fp16_8 *yu = (fp16_8*) &y;
-	plotpixel(xu,yu,a);
-}
 // Graydient is 0x00, 0x4A, 0xB5, 0xFF
-void plotpixel(fp16_8* x, fp16_8* y,uint8_t a) {
+void drawpixel(fp16_8 x,fp16_8 y,int8_t a) {
 	uint8_t c,i,t,newc;
-	fp16_8 xs,ys;
 	gfx_SetColor(0x00);
 	//gfx_SetPixel(x->p.ipart,y->p.ipart);
 	for (i=0;i<8;i++,a=(a+8)&0x3F) {
-		xs.fp = x->fp + costab[(a+0 )&0x3F];
-		ys.fp = y->fp + costab[(a-16)&0x3F];
-		c = gfx_GetPixel(xs.p.ipart,ys.p.ipart);
-		t = (uint8_t) (((xs.p.fpart>>6)&0x03)|((ys.p.fpart>>4)&(0x03<<2)))&0x0F;
+		x.fp += costab[a+0 ];
+		y.fp += costab[a-16];
+		c = gfx_GetPixel(x.p.ipart,y.p.ipart);
+		t = (uint8_t) (((x.p.fpart>>6)&0x03)|((y.p.fpart>>4)&(0x03<<2)))&0x0F;
 		t = graydient[t];
 		//dbg_sprintf(dbgout,"CC %i, MathC %i\n",c,t);
 		switch (c) {
@@ -613,7 +552,7 @@ void plotpixel(fp16_8* x, fp16_8* y,uint8_t a) {
 				break;
 		}
 		gfx_SetColor(newc);
-		gfx_SetPixel(xs.p.ipart,ys.p.ipart);
+		gfx_SetPixel(x.p.ipart,y.p.ipart);
 	}
 }
 
@@ -627,18 +566,16 @@ void drawtitle() {
 	gfx_PrintStringXY(VERSION_INFO,290,230);
 }
 
-void drawcorners(uint8_t gap) {
-	int unsigned x1,x2,w,t;
-	gfx_SetColor(0x00);
-	gfx_Line_NoClip(0,10,0,239);      //left side
-	gfx_Line_NoClip(1,10,1,239);      //left side
-	gfx_Line_NoClip(319,10,319,239);  //right side
-	gfx_Line_NoClip(318,10,318,239); //right side
+int16_t walldimx[] =	{0,0,1,1,319,319,318,318,0,319,0,319,0,319,0,319};
+int8_t walldimy[] =	{10,239,10,239,10,239,10,239,10,10,11,11,239,239,238,238};
+int8_t wallwidth[] = {100,80,70,50,30,10};
 
-	gfx_Line_NoClip(0,10,319,10);      //top side
-	gfx_Line_NoClip(0,11,319,11);      //top side
-	gfx_Line_NoClip(0,239,319,239);  //bottom side
-	gfx_Line_NoClip(0,238,319,238);  //bottom side
+void drawcorners(uint8_t gap) {
+	uint8_t i;
+	int unsigned x1,x2,t,w;
+	gfx_SetColor(0x00);
+	//Draw wall main borders
+	for(i=0;i<16;i+=2) gfx_Line_NoClip(walldimx[i],walldimy[i],walldimx[i+1],walldimy[i+1]);
 	
 	t = (curstage<20)?curstage:20;
 	w = LCD_WIDTH-10*t+3;
@@ -651,13 +588,7 @@ void drawcorners(uint8_t gap) {
 	gfx_Line_NoClip(x1,236,x2,236); //Bottom side
 	
 	if (gap) {
-		switch (highscore.difficulty) {
-			case 0: w = 100; break;
-			case 1: w = 80; break;
-			case 2: w = 70; break;
-			case 3: w = 50; break;
-			default: w = 10; break;
-		}
+		w = wallwidth[highscore.difficulty];
 		x1 = (LCD_WIDTH-w)>>1;
 		x2 = x1+w;
 	gfx_SetColor(0xFF);
@@ -674,8 +605,8 @@ void loadstage() {
 	trailend = 1;
 	growthlength = 64;
 	angle = 64-16;
-	headx = (LCD_WIDTH/2)<<8;
-	heady = (WINDOW_HEIGHT)<<8;
+	headx.fp = (LCD_WIDTH/2)<<8;
+	heady.fp = (WINDOW_HEIGHT)<<8;
 	memset(&trail,64-16,sizeof(trail));
 	circlesremain = BASE_CIRCLES_PER_STAGE+curstage*ADDITIONAL_CIRCLES_PER_STAGE;
 	redrawplayfield();
@@ -705,4 +636,34 @@ void sethighscore() {
 void longwait() {
 	int a;
 	for(a=0x080000;a>0;a--);
+}
+
+void move_and_draw_menuopts(char **optarr,uint8_t numopts,uint8_t *curopt) {
+	uint8_t i,y,k,n;
+	k = kb_Data[7];
+	i = *curopt;
+	n = numopts-1;
+	if (k&kb_Up && i) i--;
+	if (k&kb_Down && i<n) i++;
+	if (k&(kb_Up|kb_Down)) {
+		keywait();
+		*curopt = i;
+	}
+	y = (240-24*numopts)>>1;
+	gfx_SetTextScale(2,2);
+	for(i=0;i<numopts;i++,y+=24) {
+		if (i == *curopt) gfx_SetTextFGColor(0x4F);
+		centerstr(optarr[i],y);
+		gfx_SetTextFGColor(0x00);
+	}
+	gfx_SetTextScale(1,1);
+}
+
+void drawnotice(char **strings,uint8_t numlines) {
+	uint8_t gap,y,i;
+	if (numlines==2) { y=GMBOX_Y+15; gap=20; }
+	else             { y=GMBOX_Y+10; gap=15; }
+	gfx_FillRectangle(GMBOX_X,GMBOX_Y,GMBOX_W,GMBOX_H);
+	gfx_SetTextScale(1,1);
+	for(i=0;i<numlines;i++,y+=gap) centerstr(strings[i],y);
 }
