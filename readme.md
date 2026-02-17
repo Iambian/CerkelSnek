@@ -69,12 +69,13 @@ Troubleshooting
 
 License
 -------
-I use the BSD license for this project. See `LICENSE` for more details.
+I use the MIT license for this project. See `LICENSE` for more details.
 
 Version History
 ---------------
 * 0.1 - Initial release.
 * 0.2 - Fixed snake aliasing, added additional error recovery,
         tweaked scoring, merged option menu to main menu.
-   
+* 0.3 - Modified to build on CE C Toolchain v 12.1.
+        Also added entropy source to RNG.
    

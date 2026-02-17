@@ -6,7 +6,7 @@
  * Description: Nom noms, sneak through doors, don't hit yourself or walls.
  *--------------------------------------
 */
-#define VERSION_INFO "v0.2"
+#define VERSION_INFO "v0.3"
 
 #define TRANSPARENT_COLOR 0xF8
 #define GREETINGS_DIALOG_TEXT_COLOR 0xDF
@@ -59,7 +59,6 @@
 #include <intce.h>
 #include <keypadc.h>
 #include <graphx.h>
-#include <decompress.h>
 #include <fileioc.h>
 
 typedef union fp16_8 {
@@ -84,7 +83,7 @@ void redrawplayfield();
 void placetarget();
 void drawthickcircle(int x,int y,uint8_t r,uint8_t c);
 void updatescore();
-void erasepixel(fp16_8 x,fp16_8 y,int8_t a);
+void erasepixel(fp16_8 x, fp16_8 y);
 void drawpixel(fp16_8 x,fp16_8 y,int8_t angle);
 void drawcorners(uint8_t gap);
 
@@ -137,7 +136,12 @@ uint8_t creditypos[] = { 80,90,100,110,130,150,160 };
 							
 
 
-struct { int score[5]; uint8_t difficulty; uint8_t flags;} highscore;
+struct { 
+	unsigned int score[5]; 
+	uint8_t difficulty; 
+	uint8_t flags;
+} highscore;
+
 char* highscorefile = "CERSNDAT";
 //
 int8_t trail[16384];
@@ -159,32 +163,30 @@ uint8_t circlesremain;
 
 /*---------------------------------------------------------------------------*/
 /* Program starts here */
-void main(void) {
+int main(void) {
     uint8_t i,j,maintimer,gamestate,tempcolor;
 	uint8_t menuoption;
-	int8_t tempangle,tx,ty;
+	int8_t tx,ty;
 	int8_t tailangle;
-	int a,b,c,z;
+	int a;
 	fp16_8 x,y;
 	kb_key_t k;
-	void* ptr;
-	uint8_t *bytearray;
-	uint8_t *cptr;
-	char* tmp_str;
 	char* gameoverstr[2];
+
+
 	/* Put in variable initialization here */
 	gfx_Begin(gfx_8bpp);
+	srandom(rtc_Time());
 	gfx_SetDrawBuffer();
 	gfx_SetTransparentColor(TRANSPARENT_COLOR);
 	gfx_SetClipRegion(0,0,320,240);
 	gfx_SetTextTransparentColor(0xFE);
 	memset(&highscore,0,sizeof(highscore));
-	ti_CloseAll();
 	slot = ti_Open(highscorefile,"r");
 	if (slot) {
 		ti_Read(&highscore,sizeof(highscore),1,slot);
+		ti_Close(slot);
 	}
-	ti_CloseAll();
 	costab = tt+32;  //magic
 	gameoverstr[1] = "Game Over";
 	/* Main Loop */
@@ -302,12 +304,12 @@ void main(void) {
 					if (!growthlength) trailstart = (trailstart+1)&0x3FFF;
 					//Update pixels
 					gfx_SetColor(0xFF);
-					if (!growthlength) erasepixel(tailx,taily,tailangle); ///###
+					if (!growthlength) erasepixel(tailx,taily); ///###
 					if (!growthlength) {
 						tailx.fp += costab[tailangle]*2;
 						taily.fp += costab[tailangle-16]*2;
 					}
-//					if (!growthlength) erasepixel(tailx,taily,tailangle); ///###
+//					if (!growthlength) erasepixel(tailx,taily); ///###
 					gfx_SetColor(SNAKE_COLOR);
 					drawpixel(headx,heady,angle); ///###
 				}
@@ -362,6 +364,7 @@ void main(void) {
 		}
 	}
 	putaway();
+	return 0;
 }
 
 /* Put other functions here */
@@ -373,7 +376,7 @@ void vsync() {
 	asm("ld hl, 0E30000h +  0028h");    //interrupt clear register
 	asm("set 3,(hl)");                  //clear vcomp interrupt (write 1)
 	asm("ld l, 0020h");                 //interrupt raw register
-	asm("_vsync_loop");
+	asm("_vsync_loop:");
 	asm("bit 3,(hl)");                  //Wait until 1 (interrupt triggered)
 	asm("jr z,_vsync_loop");
 	asm("ret");
@@ -383,7 +386,7 @@ void putaway() {
 	gfx_End();
 	slot = ti_Open(highscorefile,"w");
 	ti_Write(&highscore,sizeof highscore, 1, slot);
-	ti_CloseAll();
+	ti_Close(slot);
 	exit(0);
 }
 
@@ -431,7 +434,7 @@ void redrawplayfield() {
 }
 
 void placetarget() {
-	int x,y,xc,yc,dx,dy,dist;
+	int x,y,xc,yc,dx,dy;
 	int unsigned t,w,x1,x2;
 	uint8_t r,acceptable;
 	//Current window dimensions
@@ -483,11 +486,11 @@ int8_t erasearray[] = {					 0,-2,
 								-1, 1,	 0, 1,	 1, 1,
 										 0, 2,					};
 										 
-void erasepixel(fp16_8 x,fp16_8 y,int8_t a) {
+void erasepixel(fp16_8 x, fp16_8 y) {
 	uint8_t i;
 	gfx_SetColor(0xFF);
-	for(i=0;i<SIZEOF_ERASEARRAY;i+=2) {
-		gfx_SetPixel(x.p.ipart+erasearray[i+0],y.p.ipart+erasearray[i+1]);
+	for(i=0; i<SIZEOF_ERASEARRAY; i += 2) {
+		gfx_SetPixel(x.p.ipart+erasearray[i+0], y.p.ipart+erasearray[i+1]);
 	}
 }
 
